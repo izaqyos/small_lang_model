@@ -1,0 +1,13 @@
+name: "Python Code BPE Tokenizer"
+data:
+  input_file: "data/python_train.jsonl"
+  max_texts_to_train_on: 50000
+  tokenizer:
+    special_tokens:
+      pad: "<|pad|>"
+      bos: "<|file_start|>"
+      eos: "<|file_end|>"
+
+tokenizer:
+  vocab_size: 8192
+  output_dir: "tokenizer"

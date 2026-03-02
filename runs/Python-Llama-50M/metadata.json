@@ -1,0 +1,384 @@
+{
+  "name": "Python-Llama-50M",
+  "created_at": "2026-02-26T12:57:24.380996",
+  "config": {
+    "model": {
+      "architecture": "llama",
+      "dimensions": {
+        "hidden_size": 512,
+        "intermediate_size": 1376,
+        "num_layers": 12
+      },
+      "attention": {
+        "num_heads": 8,
+        "num_kv_heads": null,
+        "head_dim": null,
+        "max_position_embeddings": 2048
+      },
+      "normalization": {
+        "rms_norm_eps": 1e-05
+      },
+      "rope": {
+        "theta": 10000,
+        "traditional": false,
+        "scaling": null
+      },
+      "misc": {
+        "attention_bias": false,
+        "mlp_bias": false,
+        "tie_word_embeddings": true
+      }
+    },
+    "training": {
+      "hyperparameters": {
+        "batch_size": 8,
+        "learning_rate": 0.0003,
+        "weight_decay": 0.01
+      },
+      "scheduler": {
+        "type": "cosine",
+        "min_lr_ratio": 0.01
+      },
+      "optimization": {
+        "optimizer": "adamw"
+      },
+      "epochs": 1
+    },
+    "system": {
+      "seed": 42,
+      "device": "gpu"
+    }
+  },
+  "training_info": {
+    "steps_per_epoch": 50488,
+    "total_steps": 50488,
+    "epochs": 1
+  },
+  "tokenizer": {
+    "type": "external",
+    "path": "tokenizer",
+    "vocab_size": 8192
+  },
+  "checkpoints": [
+    {
+      "step": 5000,
+      "timestamp": "2026-02-26T18:13:40.953806",
+      "paths": {
+        "model": "checkpoints/step_5000_model.safetensors",
+        "optimizer": "checkpoints/step_5000_optimizer.safetensors",
+        "state": "checkpoints/step_5000_state.json"
+      },
+      "validation_loss": 3.754974718093872
+    },
+    {
+      "step": 10000,
+      "timestamp": "2026-02-26T23:41:08.196629",
+      "paths": {
+        "model": "checkpoints/step_10000_model.safetensors",
+        "optimizer": "checkpoints/step_10000_optimizer.safetensors",
+        "state": "checkpoints/step_10000_state.json"
+      },
+      "validation_loss": 2.873775086402893
+    },
+    {
+      "step": 15000,
+      "timestamp": "2026-02-27T13:11:12.855904",
+      "paths": {
+        "model": "checkpoints/step_15000_model.safetensors",
+        "optimizer": "checkpoints/step_15000_optimizer.safetensors",
+        "state": "checkpoints/step_15000_state.json"
+      },
+      "validation_loss": 2.702045760154724
+    },
+    {
+      "step": 20000,
+      "timestamp": "2026-02-27T22:36:09.489365",
+      "paths": {
+        "model": "checkpoints/step_20000_model.safetensors",
+        "optimizer": "checkpoints/step_20000_optimizer.safetensors",
+        "state": "checkpoints/step_20000_state.json"
+      },
+      "validation_loss": 2.4533638548851013
+    },
+    {
+      "step": 25000,
+      "timestamp": "2026-02-28T10:34:13.773916",
+      "paths": {
+        "model": "checkpoints/step_25000_model.safetensors",
+        "optimizer": "checkpoints/step_25000_optimizer.safetensors",
+        "state": "checkpoints/step_25000_state.json"
+      },
+      "validation_loss": 2.3979294872283936
+    },
+    {
+      "step": 30000,
+      "timestamp": "2026-02-28T11:47:09.368205",
+      "paths": {
+        "model": "checkpoints/step_30000_model.safetensors",
+        "optimizer": "checkpoints/step_30000_optimizer.safetensors",
+        "state": "checkpoints/step_30000_state.json"
+      },
+      "validation_loss": 2.296395306587219
+    },
+    {
+      "step": 35000,
+      "timestamp": "2026-02-28T12:59:50.915999",
+      "paths": {
+        "model": "checkpoints/step_35000_model.safetensors",
+        "optimizer": "checkpoints/step_35000_optimizer.safetensors",
+        "state": "checkpoints/step_35000_state.json"
+      },
+      "validation_loss": 2.2294116902351377
+    },
+    {
+      "step": 40000,
+      "timestamp": "2026-02-28T14:11:50.838787",
+      "paths": {
+        "model": "checkpoints/step_40000_model.safetensors",
+        "optimizer": "checkpoints/step_40000_optimizer.safetensors",
+        "state": "checkpoints/step_40000_state.json"
+      },
+      "validation_loss": 2.185570321083069
+    },
+    {
+      "step": 45000,
+      "timestamp": "2026-02-28T15:24:57.495610",
+      "paths": {
+        "model": "checkpoints/step_45000_model.safetensors",
+        "optimizer": "checkpoints/step_45000_optimizer.safetensors",
+        "state": "checkpoints/step_45000_state.json"
+      },
+      "validation_loss": 2.151058566570282
+    },
+    {
+      "step": 50000,
+      "timestamp": "2026-02-28T16:37:20.612498",
+      "paths": {
+        "model": "checkpoints/step_50000_model.safetensors",
+        "optimizer": "checkpoints/step_50000_optimizer.safetensors",
+        "state": "checkpoints/step_50000_state.json"
+      },
+      "validation_loss": 2.1309535765647887
+    },
+    {
+      "step": "final",
+      "timestamp": "2026-02-28T16:44:21.801173",
+      "paths": {
+        "model": "checkpoints/step_final_model.safetensors",
+        "optimizer": "checkpoints/step_final_optimizer.safetensors",
+        "state": "checkpoints/step_final_state.json"
+      },
+      "validation_loss": 2.1566885137557983
+    }
+  ],
+  "validation": {
+    "steps": [
+      0,
+      500,
+      1000,
+      1500,
+      2000,
+      2500,
+      3000,
+      3500,
+      4000,
+      4500,
+      5000,
+      5500,
+      6000,
+      6500,
+      7000,
+      7500,
+      8000,
+      8500,
+      9000,
+      9500,
+      10000,
+      10500,
+      11000,
+      11500,
+      12000,
+      12500,
+      13000,
+      13500,
+      14000,
+      14500,
+      15000,
+      15500,
+      16000,
+      16500,
+      17000,
+      17500,
+      18000,
+      18500,
+      19000,
+      19500,
+      20000,
+      20500,
+      21000,
+      21500,
+      22000,
+      22500,
+      23000,
+      23500,
+      24000,
+      24500,
+      25000,
+      25500,
+      26000,
+      26500,
+      27000,
+      27500,
+      28000,
+      28500,
+      29000,
+      29500,
+      30000,
+      30500,
+      31000,
+      31500,
+      32000,
+      32500,
+      33000,
+      33500,
+      34000,
+      34500,
+      35000,
+      35500,
+      36000,
+      36500,
+      37000,
+      37500,
+      38000,
+      38500,
+      39000,
+      39500,
+      40000,
+      40500,
+      41000,
+      41500,
+      42000,
+      42500,
+      43000,
+      43500,
+      44000,
+      44500,
+      45000,
+      45500,
+      46000,
+      46500,
+      47000,
+      47500,
+      48000,
+      48500,
+      49000,
+      49500,
+      50000,
+      50488
+    ],
+    "losses": [
+      9.52702808380127,
+      7.342216749191284,
+      6.805688934326172,
+      6.400819902420044,
+      6.072523775100708,
+      5.831195430755615,
+      5.582726993560791,
+      5.3425592517852785,
+      4.685532188415527,
+      4.095445713996887,
+      3.754974718093872,
+      3.5119207763671874,
+      3.4095144367218015,
+      3.332430987358093,
+      3.2674300336837767,
+      3.2143238592147827,
+      3.1774799823760986,
+      3.003855514526367,
+      3.0226738452911377,
+      2.94922080039978,
+      2.873775086402893,
+      2.975498104095459,
+      2.8343946981430053,
+      2.8677210998535156,
+      2.838666582107544,
+      2.8636357736587525,
+      2.755005702972412,
+      2.7005324172973633,
+      2.63154004573822,
+      2.7114980936050417,
+      2.702045760154724,
+      2.651640787124634,
+      2.583855600357056,
+      2.6408205127716062,
+      2.6296345567703248,
+      2.608130316734314,
+      2.637446165084839,
+      2.5597494792938233,
+      2.4981544518470766,
+      2.51808402299881,
+      2.4533638548851013,
+      2.4813114261627196,
+      2.505514528751373,
+      2.4676646327972414,
+      2.5424869871139526,
+      2.452759108543396,
+      2.5136046862602233,
+      2.3822927284240722,
+      2.3369618797302247,
+      2.3748342204093933,
+      2.3979294872283936,
+      2.416222426891327,
+      2.3593971300125123,
+      2.359643876552582,
+      2.3753572845458986,
+      2.362660892009735,
+      2.386656315326691,
+      2.3725550365448,
+      2.3137669205665587,
+      2.3070862698554992,
+      2.296395306587219,
+      2.2186219811439516,
+      2.341563220024109,
+      2.264322702884674,
+      2.2889311122894287,
+      2.3402160143852235,
+      2.3022148060798644,
+      2.308455548286438,
+      2.1998669362068175,
+      2.1920666337013244,
+      2.2294116902351377,
+      2.2583707666397093,
+      2.245529842376709,
+      2.1958157348632814,
+      2.2336533212661744,
+      2.2348482537269594,
+      2.215053641796112,
+      2.276946339607239,
+      2.2574138259887695,
+      2.1488754177093505,
+      2.185570321083069,
+      2.1660972332954405,
+      2.1515067195892335,
+      2.2340599703788757,
+      2.178243248462677,
+      2.253984200954437,
+      2.169443588256836,
+      2.24657749414444,
+      2.1575497221946716,
+      2.0959857177734373,
+      2.151058566570282,
+      2.179224030971527,
+      2.2295209169387817,
+      2.141063978672028,
+      2.1399191331863405,
+      2.191916606426239,
+      2.1620436406135557,
+      2.211875650882721,
+      2.2238491415977477,
+      2.169786882400513,
+      2.1309535765647887,
+      2.1566885137557983
+    ]
+  }
+}

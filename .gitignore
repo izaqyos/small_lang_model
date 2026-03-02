@@ -1,0 +1,36 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Model weights & checkpoints (too large for git)
+runs/*/checkpoints/
+adapters/*.safetensors
+models/
+*.safetensors
+*.gguf
+
+# Training data (regenerable)
+data/*.jsonl
+data/synthetic/*.jsonl
+
+# Node / presentation
+presentation/node_modules/
+presentation/dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+
+# Logs
+*.log
+logs/
+training_log.txt
