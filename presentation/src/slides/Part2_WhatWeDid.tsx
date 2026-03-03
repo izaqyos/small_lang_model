@@ -180,37 +180,81 @@ export const part2Slides: React.FC[] = [
           <ul style={{ listStyle: 'none', padding: 0, marginBottom: 20 }}>
             <li className="bullet">LoRA rank: 32, alpha: 64</li>
             <li className="bullet">Trainable: 1.4M / 494M (0.29%)</li>
-            <li className="bullet">Peak memory: 28.2 GB</li>
+            <li className="bullet">grad_checkpoint: true</li>
+            <li className="bullet">Peak memory: 10.6 GB</li>
           </ul>
           <table>
             <thead>
               <tr>
                 <th>Iteration</th>
                 <th>Val Loss</th>
-                <th>Improvement</th>
+                <th>Status</th>
               </tr>
             </thead>
             <tbody>
               <tr>
                 <td>1</td>
-                <td>1.656</td>
+                <td>0.739</td>
                 <td>baseline</td>
               </tr>
               <tr>
-                <td>100</td>
-                <td>0.771</td>
-                <td>-53%</td>
+                <td>300</td>
+                <td>0.719</td>
+                <td>improving</td>
               </tr>
               <tr>
-                <td>200</td>
-                <td>0.738</td>
-                <td>-55%</td>
+                <td>600</td>
+                <td>0.690</td>
+                <td>best</td>
+              </tr>
+              <tr>
+                <td>700</td>
+                <td>0.690</td>
+                <td>best</td>
+              </tr>
+              <tr>
+                <td>900</td>
+                <td>0.728</td>
+                <td>overfitting</td>
+              </tr>
+              <tr>
+                <td>1000</td>
+                <td>0.707</td>
+                <td>final</td>
               </tr>
             </tbody>
           </table>
           <p style={{ marginTop: 16, color: '#9090a8', fontSize: '0.95rem' }}>
-            Dramatic improvement in just 200 iterations (~15 minutes)
+            1000 iterations over ~3.9 hours; best val loss (0.690) at iter 600
           </p>
+        </div>
+      </>
+    );
+  },
+
+  function LoRALessons() {
+    return (
+      <>
+        <h2 className="slide-title">LoRA: Lessons Learned</h2>
+        <div className="slide-content row">
+          <div className="col">
+            <h3 className="slide-subtitle">Gradient Checkpointing</h3>
+            <ul style={{ listStyle: 'none', padding: 0 }}>
+              <li className="bullet">First run crashed at iter 270 (OOM at 28 GB)</li>
+              <li className="bullet">Fix: <code>grad_checkpoint: true</code></li>
+              <li className="bullet">Recomputes activations during backward pass</li>
+              <li className="bullet">Result: 10.6 GB peak (~62% memory reduction)</li>
+            </ul>
+          </div>
+          <div className="col">
+            <h3 className="slide-subtitle">Overfitting on Small Data</h3>
+            <ul style={{ listStyle: 'none', padding: 0 }}>
+              <li className="bullet">4,940 training examples is small for LoRA</li>
+              <li className="bullet">Val loss bottomed at iter 600-700 (0.690)</li>
+              <li className="bullet">Rose to 0.728 by iter 900</li>
+              <li className="bullet">Save checkpoints often, pick the best one</li>
+            </ul>
+          </div>
         </div>
       </>
     );
@@ -239,12 +283,16 @@ export const part2Slides: React.FC[] = [
               <div className="stat-label">Synthetic examples</div>
             </div>
             <div className="stat-card">
-              <div className="stat-value">~550</div>
-              <div className="stat-label">Tokens/sec training</div>
+              <div className="stat-value">~1,100</div>
+              <div className="stat-label">Tokens/sec (LoRA)</div>
             </div>
             <div className="stat-card">
-              <div className="stat-value">28.2 GB</div>
+              <div className="stat-value">10.6 GB</div>
               <div className="stat-label">Peak memory (LoRA)</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-value">3.9 hrs</div>
+              <div className="stat-label">LoRA training time</div>
             </div>
             <div className="stat-card">
               <div className="stat-value">~250 MB</div>

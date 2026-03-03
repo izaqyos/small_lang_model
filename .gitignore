@@ -10,7 +10,9 @@ build/
 # Model weights & checkpoints (too large for git)
 runs/*/checkpoints/
 adapters/*.safetensors
+adapters-3b/*.safetensors
 models/
+fused_model/
 *.safetensors
 *.gguf
 
@@ -18,9 +20,14 @@ models/
 data/*.jsonl
 data/synthetic/*.jsonl
 
-# Node / presentation
-presentation/node_modules/
+# External tools (cloned locally)
+llama.cpp/
+
+# Node
+node_modules/
+**/node_modules/
 presentation/dist/
+learning/forward-pass-sim/dist/
 
 # OS
 .DS_Store
@@ -34,3 +41,6 @@ Thumbs.db
 *.log
 logs/
 training_log.txt
+
+# Screenshots (test artifacts)
+*.png

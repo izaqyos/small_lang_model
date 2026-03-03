@@ -1,22 +1,27 @@
 #!/bin/bash
 set -euo pipefail
 
-MODEL_NAME="${1:?Usage: $0 <model-name> [ollama-username]}"
+MODEL_NAME="${1:?Usage: $0 <model-name> [ollama-username] [adapter-path] [base-model]}"
 OLLAMA_USER="${2:-}"
+ADAPTER_PATH="${3:-adapters-3b}"
+BASE_MODEL="${4:-Qwen/Qwen2.5-Coder-3B-Instruct}"
 FUSED_DIR="fused_model"
 GGUF_DIR="models/gguf"
 LLAMA_CPP_DIR="llama.cpp"
 
 echo "=== Python Expert SLM: Convert & Publish Pipeline ==="
+echo "  Base model:   $BASE_MODEL"
+echo "  Adapters:     $ADAPTER_PATH"
+echo "  Model name:   ${OLLAMA_USER:+$OLLAMA_USER/}$MODEL_NAME"
 echo ""
 
 # Step 1: Merge LoRA adapters
 if [ ! -d "$FUSED_DIR" ]; then
     echo "[1/5] Merging LoRA adapters..."
     python -m mlx_lm.fuse \
-        --model "Qwen/Qwen2.5-Coder-0.5B-Instruct" \
-        --adapter-path adapters \
-        --de-quantize
+        --model "$BASE_MODEL" \
+        --adapter-path "$ADAPTER_PATH" \
+        --save-path "$FUSED_DIR"
     echo "  Merged model saved to $FUSED_DIR/"
 else
     echo "[1/5] Fused model already exists, skipping merge."
@@ -62,7 +67,7 @@ TEMPLATE """{{ if .System }}<|im_start|>system
 {{ end }}<|im_start|>assistant
 {{ .Response }}<|im_end|>"""
 
-SYSTEM """You are a Python expert assistant. You write clean, idiomatic, well-tested Python code. You explain your reasoning clearly and follow PEP 8 conventions."""
+SYSTEM """You are a Python expert assistant. You write clean, idiomatic, well-tested Python code. You explain your reasoning clearly and follow PEP 8 conventions. When debugging, trace through code step by step with a concrete example before identifying the bug."""
 
 PARAMETER temperature 0.2
 PARAMETER top_p 0.9

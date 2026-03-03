@@ -1,0 +1,23 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: #0f172a;
+  color: #e2e8f0;
+  font-family: "Inter", -apple-system, sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(244, 114, 182, 0.4); }
+  50% { box-shadow: 0 0 20px rgba(244, 114, 182, 0.8); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}

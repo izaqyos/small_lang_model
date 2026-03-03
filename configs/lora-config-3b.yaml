@@ -1,19 +1,19 @@
-# LoRA fine-tune config for Qwen2.5-Coder-0.5B-Instruct
-model: "Qwen/Qwen2.5-Coder-0.5B-Instruct"
+# LoRA fine-tune config for Qwen2.5-Coder-3B-Instruct
+model: "Qwen/Qwen2.5-Coder-3B-Instruct"
 data: "./data/synthetic/"
 train: true
 fine_tune_type: "lora"
-adapter_path: "./adapters"
+adapter_path: "./adapters-3b"
 
-batch_size: 4
+batch_size: 2
 iters: 1000
-learning_rate: 1e-4
+learning_rate: 5e-5
 optimizer: "adam"
 num_layers: 16
 max_seq_length: 2048
 grad_checkpoint: true
 
-save_every: 200
+save_every: 100
 steps_per_report: 10
 steps_per_eval: 100
 val_batches: 25

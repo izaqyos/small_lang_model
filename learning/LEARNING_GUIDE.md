@@ -903,6 +903,17 @@ python -m mlx_lm lora \
 
 **LoRA config** (`configs/lora-config.yaml`):
 ```yaml
+batch_size: 4
+iters: 1000
+learning_rate: 1e-4
+num_layers: 16
+max_seq_length: 2048
+grad_checkpoint: true   # trades compute for memory (see Lessons learned below)
+save_every: 200
+steps_per_report: 10
+steps_per_eval: 100
+val_batches: 25
+
 lora_parameters:
   rank: 32       # rank of the low-rank matrices (higher = more capacity)
   alpha: 64      # scaling factor (alpha/rank = scale applied to LoRA output)
@@ -924,36 +935,46 @@ lora_parameters:
 ```
 Trainable parameters: 0.292% (1.442M / 494.033M)
 
-Iter   1: Val loss 1.656              <-- baseline (no fine-tuning)
-Iter  10: Train loss 1.413
-Iter  20: Train loss 1.107            <-- rapid improvement
-Iter  50: Train loss 0.802
-Iter 100: Val loss 0.771              <-- 53% reduction in val loss
-Iter 200: Val loss 0.738, saved checkpoint
-Iter 270: Train loss 0.693            <-- crashed (OOM, two jobs running)
+Val loss trajectory:
+  Iter    1: 0.739   (baseline with loaded weights)
+  Iter  100: 0.761   (slight bump, warming up)
+  Iter  200: 0.728
+  Iter  300: 0.719
+  Iter  400: 0.722
+  Iter  500: 0.725
+  Iter  600: 0.690   <-- best
+  Iter  700: 0.690   <-- tied best
+  Iter  800: 0.699
+  Iter  900: 0.728   (overfitting starts)
+  Iter 1000: 0.707   (final)
 
-Peak memory: 28.2 GB
-Speed: ~0.5-0.8 iterations/second
+Peak memory: 10.6 GB
+Speed: ~0.5-0.7 iterations/second, ~1000-1200 tokens/sec
+Total time: ~3.9 hours (1000 iterations)
 ```
 
-The model improved dramatically in just 200 iterations (about 15 minutes). The
-validation loss dropped from 1.656 to 0.738 -- meaning the model became significantly
-better at generating Python code in our instruction format.
+Best val loss 0.690 at iter 600-700. Checkpoints saved every 200 iters:
+`adapters/0000{200,400,600,800,1000}_adapters.safetensors`. The best checkpoint
+(iter 600) was copied to `best_adapters.safetensors`.
 
-**To resume from checkpoint:**
-```bash
-python -m mlx_lm lora \
-  --model Qwen/Qwen2.5-Coder-0.5B-Instruct \
-  --data ./data/synthetic/ \
-  --train \
-  --batch-size 4 \
-  --num-layers 16 \
-  --learning-rate 1e-4 \
-  --iters 1000 \
-  --resume-adapter-file ./adapters/0000200_adapters.safetensors \
-  --adapter-path ./adapters \
-  -c configs/lora-config.yaml
-```
+**Lessons learned:**
+
+1. **Gradient checkpointing** -- Our first run crashed at iter 270 with OOM
+   (28.2 GB peak). The fix: enable `grad_checkpoint: true` in the config.
+   Gradient checkpointing trades compute for memory: instead of storing all
+   activations during the forward pass (needed for backprop), it recomputes
+   them during the backward pass. Result: peak memory dropped from 28.2 GB to
+   10.6 GB, at the cost of ~20-30% slower training. Essential when training
+   on memory-constrained hardware.
+
+2. **Overfitting on small datasets** -- After iter 800, val loss rose (0.699 ->
+   0.728 -> 0.707). With only 4,940 examples, the model started memorizing
+   rather than generalizing. The val loss curve tells the story: use the best
+   checkpoint (iter 600), not the final one.
+
+3. **Save checkpoints regularly** -- `--save-every 200` let us pick the best
+   point (iter 600) after seeing the full curve. Without intermediate
+   checkpoints, we would have been stuck with the overfit final model.
 
 ### Step 8: Merging and Evaluation
 
@@ -991,57 +1012,208 @@ it's a standard model you can share, deploy, or convert.
 
 ## 5. Stage 3: Publishing to Ollama
 
-### Step 9: GGUF Conversion and Quantization
+**Goal**: Package the fine-tuned 3B model into a format anyone can download and
+run with a single command: `ollama run yosii/python-expert`.
 
-**GGUF** is the format used by llama.cpp and Ollama. It's a single-file format
-optimized for inference.
-
-**Quantization** reduces the model size by using fewer bits per parameter:
-
-| Format | Bits | Size (500M model) | Quality | Use case |
-|---|---|---|---|---|
-| F16 | 16 | ~1 GB | Original | Reference |
-| Q8_0 | 8 | ~500 MB | 99% of original | When you have memory |
-| Q5_K_M | 5 | ~350 MB | ~97% of original | Good balance |
-| Q4_K_M | 4 | ~250 MB | ~95% of original | Best for distribution |
-
-**How quantization works (Q4_K_M):**
+The shipping pipeline has four distinct steps, each serving a different purpose:
 
 ```
-Original (float16):  [0.0312, -0.1445, 0.0898, -0.0527, ...]  (16 bits each)
-Quantized (4-bit):   [2, -9, 6, -3, ...]  + scale=0.016       (4 bits each)
-
-Reconstruction:      2*0.016=0.032, -9*0.016=-0.144, ...       (close enough!)
+MLX fine-tuned model
+(adapter + base, training format, Mac only)
+          |
+          | Step 1: fuse
+          v
+Merged HuggingFace model
+(standard format, any tool can read)
+          |
+          | Step 2: convert to GGUF
+          v
+python-expert-f16.gguf
+(portable single file, ~6 GB)
+          |
+          | Step 3: quantize Q4_K_M
+          v
+python-expert-Q4_K_M.gguf
+(compressed, ~1.5 GB, ~95% quality)
+          |
+          | Step 4: Modelfile + ollama create
+          v
+ollama run yosii/python-expert
+(anyone, anywhere)
 ```
 
-The `K_M` means "K-quant medium" -- it uses different bit widths for different
-layers. Attention layers get more bits (they're more sensitive), FFN layers get
-fewer bits.
+### Step 9a: Fuse LoRA Adapter into Base Model
+
+During training, the adapter (3.3M params of learned deltas) lives in
+`adapters-3b/` separately from the frozen base model (3B params). Before we
+can convert or distribute the model, we need to merge them into one.
+
+**Why fuse?** The adapter format is MLX-specific. Tools like llama.cpp and Ollama
+don't know about LoRA adapters -- they expect a complete model. Fusing produces a
+standard HuggingFace directory that any tool understands.
+
+**The math:**
+
+```
+During training:
+  y = W_base @ x  +  (alpha/rank) * B @ A @ x
+      ^^^^^^^^^^^     ^^^^^^^^^^^^^^^^^^^^^^^
+      frozen base        adapter (trained)
+
+After fusing:
+  W_merged = W_base + (alpha/rank) * B @ A
+  y = W_merged @ x
+
+The model is identical in behavior -- it's just stored as one matrix.
+```
+
+**Which adapter checkpoint to use?** Pick the best val loss checkpoint, not the
+final one. From our 3B run, check the val loss curve -- typically the best
+checkpoint is 50-75% through training before overfitting sets in.
 
 **CLI:**
 ```bash
-# Convert HuggingFace model to GGUF
+# Fuse the best adapter into the 3B base model
+python -m mlx_lm.fuse \
+  --model Qwen/Qwen2.5-Coder-3B-Instruct \
+  --adapter-path ./adapters-3b \
+  --save-path ./fused_model
+
+# Verify it works before converting
+python -m mlx_lm.generate \
+  --model ./fused_model \
+  --max-tokens 300 \
+  --prompt "Find the bug in this code:
+
+def merge_sorted(a, b):
+    result = []
+    i = j = 0
+    while i < len(a) and j < len(b):
+        if a[i] < b[j]:
+            result.append(a[i])
+            i += 1
+        else:
+            result.append(b[j])
+            j += 1
+    return result"
+```
+
+The output directory `fused_model/` will contain standard HuggingFace files:
+`config.json`, `tokenizer.json`, `model.safetensors`, etc.
+
+### Step 9b: Convert to GGUF
+
+**GGUF** (GPT-Generated Unified Format) is the standard interchange format for
+local LLM inference. It's used by llama.cpp, Ollama, LM Studio, Jan, and most
+local inference tools. It stores weights, architecture metadata, and tokenizer
+in a single self-contained file.
+
+**Why not just use the HuggingFace format?** HuggingFace models are split across
+multiple files, use Python-specific serialization, and require transformers/PyTorch.
+GGUF is a single portable binary that any C++ program can memory-map directly --
+no Python, no framework dependencies, instant load.
+
+```
+HuggingFace (./fused_model/):          GGUF (single file):
+  config.json                           python-expert-f16.gguf
+  tokenizer.json                          ├── header (metadata, architecture)
+  tokenizer_config.json                   ├── tokenizer vocab
+  model-00001-of-00002.safetensors        └── weights (all layers, one file)
+  model-00002-of-00002.safetensors
+```
+
+**CLI:**
+```bash
+# Clone llama.cpp (first time only)
+git clone https://github.com/ggerganov/llama.cpp.git
+pip install -r llama.cpp/requirements.txt
+
+# Convert fused HF model to GGUF (float16, full precision)
+mkdir -p models/gguf
 python llama.cpp/convert_hf_to_gguf.py ./fused_model \
   --outfile models/gguf/python-expert-f16.gguf
 
-# Quantize to 4-bit
+# Check size -- 3B in f16 should be ~6 GB
+ls -lh models/gguf/python-expert-f16.gguf
+```
+
+### Step 9c: Quantize to Q4_K_M
+
+**Quantization** reduces model size by using fewer bits per weight value. A 3B
+model in float16 is ~6 GB -- fine for your Mac, but large for distribution.
+Q4_K_M brings it down to ~1.5 GB at ~95% of original quality.
+
+**How it works:**
+
+```
+Original weight (float16, 16 bits):
+  0.0312   →  binary: 0 01000 0000000000  (16 bits)
+
+Q4_K_M quantized (4 bits + shared scale):
+  Group of 256 weights shares a float16 scale factor
+  Each weight stored as a 4-bit integer (-8 to 7)
+
+  0.0312 → scale=0.016, quantized index=2
+  Reconstruct: 2 * 0.016 = 0.032  (close enough, 2.5% error)
+
+Memory: 16 bits → 4 bits = 4× compression
+```
+
+**Why "K_M"?** The "K-quant" family uses different bit widths for different
+layers. Embedding and output projection layers (more sensitive) stay at higher
+precision. Attention layers get more bits than FFN layers. "M" = medium quality
+within the K-quant family. This layer-aware allocation preserves quality better
+than naively quantizing everything uniformly.
+
+| Format | Bits | 3B model size | Quality | Use case |
+|---|---|---|---|---|
+| F16 | 16 | ~6 GB | 100% | Reference, conversion |
+| Q8_0 | 8 | ~3 GB | ~99% | When memory allows |
+| Q5_K_M | 5 | ~2 GB | ~97% | High quality distribution |
+| Q4_K_M | 4 | ~1.5 GB | ~95% | Best size/quality tradeoff |
+| Q3_K_M | 3 | ~1.2 GB | ~90% | Space-constrained |
+
+**CLI:**
+```bash
+# Build the quantization tool (first time only)
+cd llama.cpp && cmake -B build && cmake --build build --target llama-quantize -j && cd ..
+
+# Quantize f16 → Q4_K_M
 ./llama.cpp/build/bin/llama-quantize \
   models/gguf/python-expert-f16.gguf \
   models/gguf/python-expert-Q4_K_M.gguf \
   Q4_K_M
+
+# Verify
+ls -lh models/gguf/python-expert-Q4_K_M.gguf  # should be ~1.5 GB
 ```
 
-### Step 10: Ollama Packaging
+### Step 10: Ollama Packaging and Publishing
 
-Ollama uses a **Modelfile** (like a Dockerfile for models) to define how the model
-should be served:
+Ollama is a local model server (like Docker for LLMs). A **Modelfile** defines
+how to serve the model -- which weights to load, how to format prompts, and what
+parameters to use at inference time.
 
+**Why a chat template?** The model was fine-tuned expecting inputs in a specific
+format. Qwen2.5 uses **ChatML** format:
+
+```
+<|im_start|>system
+You are a Python expert...<|im_end|>
+<|im_start|>user
+Write a function...<|im_end|>
+<|im_start|>assistant
+```
+
+If you pass plain text without this template, the model sees out-of-distribution
+input and produces degraded output. The Modelfile template must exactly match
+what the model was trained with.
+
+**Modelfile** (`models/gguf/Modelfile`):
 ```dockerfile
-# The quantized model file
 FROM ./python-expert-Q4_K_M.gguf
 
-# Chat template -- MUST match what the model was trained with
-# Qwen2.5 uses ChatML format:
+# ChatML template -- must match Qwen2.5 training format exactly
 TEMPLATE """{{ if .System }}<|im_start|>system
 {{ .System }}<|im_end|>
 {{ end }}{{ if .Prompt }}<|im_start|>user
@@ -1049,30 +1221,56 @@ TEMPLATE """{{ if .System }}<|im_start|>system
 {{ end }}<|im_start|>assistant
 {{ .Response }}<|im_end|>"""
 
-# Default system prompt
+# Default system prompt injected on every conversation
 SYSTEM """You are a Python expert assistant. You write clean, idiomatic,
 well-tested Python code. You explain your reasoning clearly and follow
-PEP 8 conventions."""
+PEP 8 conventions. When debugging, trace through code step by step."""
 
 # Inference parameters
 PARAMETER temperature 0.2     # low = more deterministic (good for code)
-PARAMETER top_p 0.9           # nucleus sampling threshold
-PARAMETER stop "<|im_end|>"   # stop generating at this token
-PARAMETER num_ctx 4096        # context window size
+PARAMETER top_p 0.9           # nucleus sampling: only sample from top 90% prob mass
+PARAMETER stop "<|im_end|>"   # stop token: end of assistant turn
+PARAMETER num_ctx 4096        # context window (Qwen supports 32K, 4K is practical)
 ```
 
-**Build and test locally:**
+**Why temperature 0.2?** Code generation benefits from determinism -- you want the
+most likely correct answer, not creative variation. Temperature 0.2 means the
+model strongly prefers high-probability tokens. Temperature 1.0 would produce
+more varied (and potentially incorrect) code.
+
+**Build, test, and publish:**
 ```bash
-ollama create python-expert -f Modelfile
-ollama run python-expert
->>> Write a Python function to validate an email address
+# Build locally
+cd models/gguf
+ollama create yosii/python-expert -f Modelfile
+
+# Test with the debugging prompt that 0.5B failed
+ollama run yosii/python-expert "Find the bug in this code:
+
+def merge_sorted(a, b):
+    result = []
+    i = j = 0
+    while i < len(a) and j < len(b):
+        if a[i] < b[j]:
+            result.append(a[i])
+            i += 1
+        else:
+            result.append(b[j])
+            j += 1
+    return result"
+
+# If quality is good, push to registry
+# First: create account at ollama.com, generate SSH key
+ollama push yosii/python-expert
+
+# Anyone can now run it:
+# ollama run yosii/python-expert
 ```
 
-**Publish to Ollama registry:**
+**One-shot script:** The full pipeline is automated in `src/publish/convert_and_publish.sh`:
 ```bash
-# Create account at ollama.com, add SSH key
-ollama push yourname/python-expert
-# Now anyone can: ollama run yourname/python-expert
+# Runs all 5 steps: fuse → clone llama.cpp → convert → quantize → create Ollama model
+bash src/publish/convert_and_publish.sh python-expert yosii
 ```
 
 ---
@@ -1101,7 +1299,8 @@ Training memory ~= 4 * model_size_in_bytes
 ```
 
 For our 42M model: ~42M * 12 bytes = ~500MB (plus activations ~1-2GB)
-For LoRA on 494M: only 1.4M trained, but base model loaded: ~1GB + ~100MB
+For LoRA on 494M (0.5B): ~10.6 GB peak (with grad_checkpoint=true; without it, ~28 GB)
+For LoRA on 3B: ~11-12 GB peak (grad_checkpoint=true, batch_size=2)
 
 ### Training Compute (Chinchilla Scaling)
 
@@ -1118,8 +1317,10 @@ This is under-trained by Chinchilla standards, but fine for a learning project.
 
 ```
 Our 50M model on M4 Pro: ~500 tokens/sec (training)
-LoRA on 500M model:      ~1,000 tokens/sec (training)
+LoRA on 500M model:      ~1,100 tokens/sec (training)
+LoRA on 3B model:        ~350-400 tokens/sec (training)
 Inference on 500M model:  ~50-100 tokens/sec (generation)
+Inference on 3B model:    ~30-60 tokens/sec (generation)
 ```
 
 ### File Sizes
@@ -1127,26 +1328,32 @@ Inference on 500M model:  ~50-100 tokens/sec (generation)
 | What | Size |
 |---|---|
 | Python corpus (train) | 548 MB |
-| Synthetic data (train) | ~5 MB |
+| Synthetic data (train) | ~10 MB (5,042 examples incl. CoT) |
 | BPE tokenizer | 240 KB |
 | 50M model weights (BF16) | ~84 MB |
-| 500M model weights (BF16) | ~988 MB |
-| LoRA adapter weights | 5.5 MB |
-| 500M quantized (Q4_K_M) | ~250 MB |
+| 0.5B model weights (BF16) | ~988 MB |
+| 3B model weights (BF16) | ~6 GB |
+| LoRA adapter (0.5B) | 5.5 MB |
+| LoRA adapter (3B) | 13 MB |
+| 3B fused model (BF16) | ~6 GB |
+| 3B GGUF (f16) | ~6 GB |
+| 3B quantized (Q4_K_M) | ~1.5 GB |
 
 ### Project File Tree
 
 ```
-SLM/
+small_lang_model/
 ├── configs/
-│   ├── lora-config.yaml            # LoRA hyperparameters
+│   ├── lora-config.yaml             # LoRA config for Qwen 0.5B
+│   ├── lora-config-3b.yaml          # LoRA config for Qwen 3B
 │   ├── model-config-python-50m.yaml # 50M model architecture + training
 │   └── tokenizer-config.yaml        # BPE tokenizer config
 ├── src/
 │   ├── data/
 │   │   ├── prepare_python_corpus.py  # Download code_search_net -> JSONL
 │   │   ├── generate_from_corpus.py   # Corpus -> instruction pairs (free)
-│   │   └── generate_synthetic.py     # Claude API -> instruction pairs
+│   │   ├── generate_synthetic.py     # Claude API -> instruction pairs
+│   │   └── generate_cot_examples.py  # Chain-of-thought debugging examples
 │   ├── eval/
 │   │   ├── benchmark.py              # HumanEval + custom Python tests
 │   │   └── interactive.py            # REPL for testing models
@@ -1156,16 +1363,27 @@ SLM/
 │   ├── python_train.jsonl            # 403K Python functions
 │   ├── python_val.jsonl              # 8K validation functions
 │   └── synthetic/
-│       ├── train.jsonl               # 4,940 instruction/response pairs
-│       └── valid.jsonl               # 260 validation pairs
+│       ├── train.jsonl               # 5,042 instruction/response pairs (incl. CoT)
+│       ├── valid.jsonl               # 260 validation pairs
+│       └── cot_examples.jsonl        # 102 chain-of-thought debugging examples
 ├── tokenizer/
 │   └── tokenizer.json                # Trained BPE tokenizer (8K vocab)
-├── adapters/
-│   ├── adapter_config.json           # LoRA config used
-│   └── adapters.safetensors          # Trained LoRA weights (5.5MB)
+├── adapters/                         # 0.5B LoRA checkpoints
+│   ├── adapter_config.json
+│   ├── adapters.safetensors          # Active checkpoint (iter 600, best)
+│   └── best_adapters.safetensors    # Best checkpoint (val loss 0.690)
+├── adapters-3b/                      # 3B LoRA checkpoints (in progress)
+│   └── 0000???_adapters.safetensors
+├── fused_model/                      # After mlx_lm.fuse (created in Phase 3)
+├── models/gguf/                      # After conversion (created in Phase 3)
+│   ├── python-expert-f16.gguf
+│   ├── python-expert-Q4_K_M.gguf
+│   └── Modelfile
 ├── runs/
 │   └── Python-Llama-50M/             # 50M training checkpoints + logs
 ├── mlx-pretrain/                     # Pre-training framework
+├── eval_50m.sh                       # Manual eval script for 50M model
 ├── requirements.txt
-└── README.md
+├── README.md
+└── LEARNING_GUIDE.md
 ```
